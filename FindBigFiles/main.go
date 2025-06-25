@@ -140,11 +140,14 @@ func ReadDir(path string) []FileInfo {
 // 程序主入口
 func main() {
 
+	var mainFile string = "main"
+
+	// 获取文件名称
 	file, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
 	}
-	mainFile := filepath.Base(file)
+	mainFile = filepath.Base(file)
 
 	// 修改 flag.Usage, 输出使用信息
 	flag.Usage = func() {
