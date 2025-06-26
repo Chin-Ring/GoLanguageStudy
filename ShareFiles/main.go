@@ -2,7 +2,7 @@
 FileName: main.go
 Create on: 2025-06-24
 Author: ChinRing
-Description: 实现查找文件大小大于输入值的文件
+Description: 实现通过文件(大小,关键字,拓展名)查找文件
 */
 
 package main
@@ -53,19 +53,19 @@ type ExtFilter struct {
 }
 
 func (kw KeyWordFilter) Match(file string) bool {
-	return strings.Contains(filepath.Base(file), kw.KeyWord)
+	return strings.Contains(strings.TrimSuffix(filepath.Base(file), filepath.Ext(file)), kw.KeyWord)
 }
 
 func (e ExtFilter) Match(file string) bool {
 	ext := e.Ext
-	if ext != "" && ext[0] != '.' {
+	if !strings.HasPrefix(ext, ".") {
 		ext = "." + ext
 	}
 	return filepath.Ext(file) == ext
 }
 
 func checkFilter(filter FileFilter, file string) bool {
-	return filter.Match(file)
+	return filter.Match(filepath.Base(file))
 }
 
 // 初始化函数
@@ -75,7 +75,7 @@ func init() {
 	flag.Uint64Var(&fileSize, "size", 0, "指定查找的文件大小")
 	flag.StringVar(&sizeUnit, "unit", "KB", "指定查找文件大小的单位, 默认KB(不区分大小写): [KB,MB,GB]")
 	flag.StringVar(&shareKeyWord, "keyword", "", "通过关键字查找")
-	// flag.StringVar(&fileExt, "ext", "", "通过文件拓展名查找") // TODO
+	flag.StringVar(&fileExt, "ext", "", "通过文件拓展名查找")
 
 }
 
@@ -148,15 +148,33 @@ func ReadDir(path string) []FileInfo {
 	for _, file := range files {
 
 		absolutePath := filepath.Join(path, file.Name())
-		result, err := checkFileSize(absolutePath, fileSize, sizeUnit)
+		fileStat, _ := os.Stat(absolutePath)
+		isMatch := false
 
+		b, err := checkFileSize(absolutePath, fileSize, sizeUnit)
 		if err != nil {
 			log.Fatal(err)
-		} else if checkFilter(KeyWordFilter{KeyWord: shareKeyWord}, absolutePath) && result {
-			fileBytesSize, _ := os.Stat(absolutePath)
+		}
+
+		if !b {
+			continue
+		}
+
+		if shareKeyWord != "" && checkFilter(KeyWordFilter{KeyWord: shareKeyWord}, absolutePath) {
+			isMatch = true
+		}
+
+		if fileExt != "" && checkFilter(ExtFilter{Ext: fileExt}, absolutePath) {
+			isMatch = true
+		}
+
+		if isMatch {
 			matchFiles = append(
 				matchFiles,
-				FileInfo{FilePath: absolutePath, FileSize: uint64(fileBytesSize.Size())})
+				FileInfo{
+					FilePath: absolutePath,
+					FileSize: uint64(fileStat.Size()),
+				})
 		}
 
 	}
@@ -171,6 +189,7 @@ func ReadDir(path string) []FileInfo {
 
 	}
 	return matchFiles
+
 }
 
 // 程序主入口
@@ -194,7 +213,7 @@ func main() {
 
 	result := ReadDir(rootPath)
 	for _, StructData := range result {
-		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(shareKeyWord))
+		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(shareKeyWord) + regexp.QuoteMeta(fileExt))
 		text := StructData.FilePath
 		highlighted := pattern.ReplaceAllString(text, "\033[31m$0\033[0m")
 		fmt.Println(highlighted, formatSize(StructData.FileSize))
