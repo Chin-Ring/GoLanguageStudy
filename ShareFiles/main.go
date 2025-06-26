@@ -14,21 +14,24 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 // 定义常量
 const (
-	KB = 1024
-	MB = KB * 1024
-	GB = MB * 1024
+	KB = 1024      // KB 转换 Byte
+	MB = KB * 1024 // MB 转换 Byte
+	GB = MB * 1024 // GB 转换 Byte
 )
 
 // 定义变量
-var rootPath string
-var fileSize uint64
-var sizeUnit string
-var matchFiles []FileInfo
+var rootPath string       // 目录路径
+var fileSize uint64       // 文件大小
+var sizeUnit string       // 大小单位
+var shareKeyWord string   // 关键词
+var fileExt string        // 文件拓展名
+var matchFiles []FileInfo // 处理后符合条件的文件
 
 // 结构体,用于存储文件路径和文件大小
 type FileInfo struct {
@@ -36,21 +39,44 @@ type FileInfo struct {
 	FileSize uint64
 }
 
+// 关键字与拓展名函数结构一致,可以使用多态去实现
+type FileFilter interface {
+	Match(file string) bool
+}
+
+type KeyWordFilter struct {
+	KeyWord string
+}
+
+type ExtFilter struct {
+	Ext string
+}
+
+func (kw KeyWordFilter) Match(file string) bool {
+	return strings.Contains(filepath.Base(file), kw.KeyWord)
+}
+
+func (e ExtFilter) Match(file string) bool {
+	ext := e.Ext
+	if ext != "" && ext[0] != '.' {
+		ext = "." + ext
+	}
+	return filepath.Ext(file) == ext
+}
+
+func checkFilter(filter FileFilter, file string) bool {
+	return filter.Match(file)
+}
+
 // 初始化函数
 func init() {
 
-	flag.StringVar(&rootPath, "dir", "./", "文件查找的根路径")
-	flag.Uint64Var(&fileSize, "size", 0, "查找文件大小大于多少的文件")
-	flag.StringVar(&sizeUnit, "unit", "KB", "查找文件大小的单位(不区分大小写): [KB,MB,GB]")
+	flag.StringVar(&rootPath, "dir", "./", "指定查找的文件根目录")
+	flag.Uint64Var(&fileSize, "size", 0, "指定查找的文件大小")
+	flag.StringVar(&sizeUnit, "unit", "KB", "指定查找文件大小的单位, 默认KB(不区分大小写): [KB,MB,GB]")
+	flag.StringVar(&shareKeyWord, "keyword", "", "通过关键字查找")
+	// flag.StringVar(&fileExt, "ext", "", "通过文件拓展名查找") // TODO
 
-}
-
-func keyWordShare() {
-	// TODO: 通过关键字查找文件
-}
-
-func fileExtShare() {
-	// TODO: 通过文件拓展名查找文件
 }
 
 // 单位转换用于计算文件大小是否超过预定值
@@ -80,13 +106,13 @@ func formatSize(size uint64) string {
 	switch {
 
 	case size >= GB:
-		return fmt.Sprintf("%f GB", float64(size)/float64(GB))
+		return fmt.Sprintf("%.2f GB", float64(size)/float64(GB))
 
 	case size >= MB:
-		return fmt.Sprintf("%f MB", float64(size)/float64(MB))
+		return fmt.Sprintf("%.2f MB", float64(size)/float64(MB))
 
 	case size >= KB:
-		return fmt.Sprintf("%f KB", float64(size)/float64(KB))
+		return fmt.Sprintf("%.2f KB", float64(size)/float64(KB))
 
 	default:
 		return fmt.Sprintf("%d B", size)
@@ -126,9 +152,11 @@ func ReadDir(path string) []FileInfo {
 
 		if err != nil {
 			log.Fatal(err)
-		} else if result {
+		} else if checkFilter(KeyWordFilter{KeyWord: shareKeyWord}, absolutePath) && result {
 			fileBytesSize, _ := os.Stat(absolutePath)
-			matchFiles = append(matchFiles, FileInfo{FilePath: absolutePath, FileSize: uint64(fileBytesSize.Size())})
+			matchFiles = append(
+				matchFiles,
+				FileInfo{FilePath: absolutePath, FileSize: uint64(fileBytesSize.Size())})
 		}
 
 	}
@@ -148,14 +176,11 @@ func ReadDir(path string) []FileInfo {
 // 程序主入口
 func main() {
 
-	var mainFile string = "main"
-
-	// 获取文件名称
 	file, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
 	}
-	mainFile = filepath.Base(file)
+	mainFile := filepath.Base(file)
 
 	// 修改 flag.Usage, 输出使用信息
 	flag.Usage = func() {
@@ -169,7 +194,10 @@ func main() {
 
 	result := ReadDir(rootPath)
 	for _, StructData := range result {
-		fmt.Println(StructData.FilePath, formatSize(StructData.FileSize))
+		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(shareKeyWord))
+		text := StructData.FilePath
+		highlighted := pattern.ReplaceAllString(text, "\033[31m$0\033[0m")
+		fmt.Println(highlighted, formatSize(StructData.FileSize))
 	}
 
 }
