@@ -45,6 +45,14 @@ func init() {
 
 }
 
+func keyWordShare() {
+	// TODO: 通过关键字查找文件
+}
+
+func fileExtShare() {
+	// TODO: 通过文件拓展名查找文件
+}
+
 // 单位转换用于计算文件大小是否超过预定值
 func convertToBytes(size uint64, unit string) (uint64, error) {
 
