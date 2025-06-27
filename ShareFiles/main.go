@@ -26,12 +26,12 @@ const (
 )
 
 // 定义变量
-var rootPath string       // 目录路径
-var fileSize uint64       // 文件大小
-var sizeUnit string       // 大小单位
-var shareKeyWord string   // 关键词
-var fileExt string        // 文件拓展名
-var matchFiles []FileInfo // 处理后符合条件的文件
+var rootPath string     // 目录路径
+var fileSize uint64     // 文件大小
+var sizeUnit string     // 大小单位
+var shareKeyWord string // 关键词
+var fileExt string      // 文件拓展名
+var visited = make(map[string]bool)
 
 // 结构体,用于存储文件路径和文件大小
 type FileInfo struct {
@@ -122,12 +122,11 @@ func formatSize(size uint64) string {
 }
 
 // 判断文件大小
-func checkFileSize(file string, size uint64, unit string) (bool, error) {
+func checkFileSize(file os.FileInfo, size uint64, unit string) (bool, error) {
 
 	var actualSize uint64
 
-	fileInfo, _ := os.Stat(file)
-	actualSize = uint64(fileInfo.Size())
+	actualSize = uint64(file.Size())
 
 	limitSize, err := convertToBytes(size, unit)
 	if err != nil {
@@ -139,25 +138,43 @@ func checkFileSize(file string, size uint64, unit string) (bool, error) {
 
 // 遍历目录
 func ReadDir(path string) []FileInfo {
+	var matchFiles []FileInfo // 处理后符合条件的文件
+	if visited[path] {
+		return nil
+	}
+	visited[path] = true
 
 	files, err := os.ReadDir(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
 
 	for _, file := range files {
 
 		absolutePath := filepath.Join(path, file.Name())
-		fileStat, _ := os.Stat(absolutePath)
+		fileStat, err := os.Stat(absolutePath)
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		if file.IsDir() {
+			// 合并子目录结果
+			matchFiles = append(matchFiles, ReadDir(absolutePath)...)
+			continue
+		}
 		isMatch := false
 
-		b, err := checkFileSize(absolutePath, fileSize, sizeUnit)
+		b, err := checkFileSize(fileStat, fileSize, sizeUnit)
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
 		}
 
 		if !b {
 			continue
+		}
+
+		if shareKeyWord == "" && fileExt == "" {
+			isMatch = true
 		}
 
 		if shareKeyWord != "" && checkFilter(KeyWordFilter{KeyWord: shareKeyWord}, absolutePath) {
@@ -197,7 +214,7 @@ func main() {
 
 	file, err := os.Executable()
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
 	mainFile := filepath.Base(file)
 
