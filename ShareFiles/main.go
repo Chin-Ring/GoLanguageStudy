@@ -230,10 +230,18 @@ func main() {
 
 	result := ReadDir(rootPath)
 	for _, StructData := range result {
-		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(shareKeyWord) + regexp.QuoteMeta(fileExt))
-		text := StructData.FilePath
-		highlighted := pattern.ReplaceAllString(text, "\033[31m$0\033[0m")
-		fmt.Println(highlighted, formatSize(StructData.FileSize))
+		if shareKeyWord != "" {
+			KeyPattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(shareKeyWord))
+			text := StructData.FilePath
+			highlighted := KeyPattern.ReplaceAllString(text, "\033[31m$0\033[0m")
+			fmt.Println(highlighted, formatSize(StructData.FileSize))
+		}
+		if fileExt != "" {
+			ExtPattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(fileExt))
+			text := StructData.FilePath
+			highlighted := ExtPattern.ReplaceAllString(text, "\033[31m$0\033[0m")
+			fmt.Println(highlighted, formatSize(StructData.FileSize))
+		}
 	}
 
 }
